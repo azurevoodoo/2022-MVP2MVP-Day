@@ -1,11 +1,12 @@
 public record BuildData(
     DirectoryPath ArtifactsPath,
     DirectoryPath SourcePath,
-    string Configuration
+    string Configuration,
+    string Version
 )
 {
      public DotNetMSBuildSettings MSBuildSettings = new DotNetMSBuildSettings {
-                    
+                    Version = Version
                 }.
                 SetConfiguration(Configuration);
 }
@@ -14,7 +15,8 @@ Setup(
     context => new BuildData(
         MakeAbsolute(Directory("./artifacts")),
         MakeAbsolute(Directory("./src")),
-        "Release"
+        "Release",
+        FormattableString.Invariant($"{DateTime.UtcNow:yyyy.MM.dd}.{GitHubActions.Environment.Workflow.RunNumber}")
     )
 );
 
@@ -77,7 +79,19 @@ Task("Integration-Test")
 
 Task("Pack")
     .IsDependentOn("Test")
-    .IsDependentOn("Integration-Test");
+    .IsDependentOn("Integration-Test")
+    .Does<BuildData>((context, data) => {
+        DotNetPack(
+            data.SourcePath.FullPath,
+            new DotNetPackSettings {
+                NoRestore = true,
+                NoBuild = true,
+                OutputDirectory = data.ArtifactsPath,
+                MSBuildSettings = data.MSBuildSettings
+            }
+            );
+    });
+
 
 Task("Upload-Artifact")
     .IsDependentOn("Pack")
